@@ -1,19 +1,19 @@
 Локальный сервер для менеджера подключений. Работает на SQLite.
 Первый авторизовавшийся пользователь на сервере, будет админом.
 
-https://clearbat.iiko.online/
+[Wiki CLEAR.bat](https://clearbat.iiko.online/)
 
 Установка и настройка:
-1. Скачать zip архив с git
+1. Скачать zip архив с git - [ссылка](https://github.com/ru2mix/CLEAR.node/archive/refs/heads/main.zip)
 2. Распаковать где угодно.
-3. Установить python (Я тестировал на https://www.python.org/downloads/release/python-3143/ )
+3. Установить python (Я тестировал на [Python 3.14.3](https://www.python.org/downloads/release/python-3143/) )
 4. Запустить _setup.bat (windows) или _setup.sh (linux)
 5. После установки всех пакетов запустить _run.bat (windows) _run.sh (linux)
 
 Для windows если нужно установить как службу можно:
 1. Открыть cmd от администратора
 2. В cmd прописать путь до сервера и перейти. Например cd C:/CLEAR.node/
-3. Скачать NSSM: https://nssm.cc/download (Если сервер не доступен, можете запросить в чате я пришлю)
+3. [Скачать NSSM](https://nssm.cc/download) (Если сервер не доступен, можете запросить в чате я пришлю)
 4. Положить nssm.exe в корень папки сервера
 5. В cmd прописать: nssm.exe install CLEAR.note
 6. Откроется окошко нужно указать данные:
