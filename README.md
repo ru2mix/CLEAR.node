@@ -15,7 +15,7 @@
 2. В cmd прописать путь до сервера и перейти. Например cd C:/CLEAR.node/
 3. [Скачать NSSM](https://nssm.cc/download) (Если сервер не доступен, можете запросить в чате я пришлю)
 4. Положить nssm.exe в корень папки сервера
-5. В cmd прописать: nssm.exe install CLEAR.note
+5. В cmd прописать: nssm.exe install CLEAR.node
 6. Откроется окошко нужно указать данные:
 7. Path - Путь до pyton после _setup.bat. Пример: C:\CLEAR.node\venv\Scripts\python.exe
 8. Startup directory - Путь до основной директории. Пример: C:\CLEAR.node
