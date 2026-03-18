@@ -6,7 +6,7 @@
 Установка и настройка:
 1. Скачать zip архив с git - [ссылка](https://github.com/ru2mix/CLEAR.node/archive/refs/heads/main.zip)
 2. Распаковать где угодно.
-3. Установить python (Я тестировал на [Python 3.14.3](https://www.python.org/downloads/release/python-3143/) )
+3. Установить python (Я тестировал на [Python 3.14.3](https://www.python.org/downloads/release/python-3143/) ) , при установке обязательно ставим галку ADD TO PATH.
 4. Запустить _setup.bat (windows) или _setup.sh (linux)
 5. После установки всех пакетов запустить _run.bat (windows) _run.sh (linux)
 
