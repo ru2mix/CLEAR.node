@@ -19,4 +19,4 @@ app.include_router(admin_groups.router)
 app.include_router(admin_system.router)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="192.168.88.16", port=8001, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)

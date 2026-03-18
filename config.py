@@ -1,3 +1,3 @@
 
-CENTRAL_AUTH_URL = "http://0.0.0.0:8000" 
+CENTRAL_AUTH_URL = "https://clearbat.iiko.tech" 
 DB_PATH = "database.db"
