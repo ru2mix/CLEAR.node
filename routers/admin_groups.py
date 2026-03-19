@@ -1,5 +1,7 @@
 
 import aiosqlite
+from dependencies import increment_admin_revision
+from ws_router import manager
 from fastapi import APIRouter, Depends, Request, HTTPException
 from cache import groups_cache, rights_cache, accessible_ids_cache
 from database import get_db
@@ -43,7 +45,10 @@ async def create_group(g: GroupCreate, request: Request, user = Depends(require_
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
               (g.id, g.name, int(g.is_superadmin), int(g.can_manage_users), int(g.can_save_local), int(g.can_add), int(g.can_edit), int(g.can_delete), 
                int(g.is_hidden), int(g.is_deleted), int(g.can_read_log), int(g.can_manage_roles), int(g.can_manage_settings)))
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     await log_event(db, "Изменение прав", user, request.client.host, f"Обновлена группа: '{g.name}'")
     
     groups_cache.clear()
@@ -58,7 +63,10 @@ async def delete_group(group_id: str, request: Request, user = Depends(require_m
     row = await c.fetchone()
     g_name = row[0] if row else "Unknown"
     await c.execute("UPDATE Groups SET IsDeleted = 1 WHERE Id = ?", (group_id,))
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     await log_event(db, "Удаление", user, request.client.host, f"Мягкое удаление группы: '{g_name}'")
     
     groups_cache.clear()
@@ -85,8 +93,11 @@ async def clear_group_permissions(group_id: str, request: Request, user = Depend
     """, (new_rev, group_id))
     
     await c.execute("DELETE FROM EntityPermissions WHERE GroupId = ?", (group_id,))
-    await db.commit()
     
+    await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+
     groups_cache.clear()
     rights_cache.clear()
     accessible_ids_cache.clear()
@@ -123,9 +134,10 @@ async def set_permission(perm: PermissionSetReq, request: Request, user = Depend
             SELECT Id FROM children
         )
     """, (new_rev, perm.entity_id))
-    
+
     await db.commit()
-    
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     groups_cache.clear()
     rights_cache.clear()
     accessible_ids_cache.clear()
@@ -135,7 +147,10 @@ async def set_permission(perm: PermissionSetReq, request: Request, user = Depend
 async def invite_user(req: InviteReq, request: Request, user = Depends(require_manage_roles), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
     await c.execute("INSERT OR IGNORE INTO UserGroups (UserId, GroupId) VALUES (?, ?)", (req.user_id, req.group_id))
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     await c.execute("SELECT Name FROM Groups WHERE Id = ?", (req.group_id,))
     row = await c.fetchone()
     group_name = row[0] if row else "Unknown"
@@ -160,6 +175,8 @@ async def set_group_users(group_id: str, req: GroupUsersReq, request: Request, u
     for uid in req.user_ids: 
         await c.execute("INSERT INTO UserGroups (UserId, GroupId) VALUES (?, ?)", (uid, group_id))
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     await log_event(db, "Изменение прав", user, request.client.host, f"Обновлен состав пользователей (Кол-во: {len(req.user_ids)}) для группы ID: {group_id}")
     
     groups_cache.clear()

@@ -125,3 +125,14 @@ async def require_superadmin(user = Depends(verify_user), db: aiosqlite.Connecti
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND g.IsSuperAdmin = 1""", (user_id,))
     if not await c.fetchone(): raise HTTPException(403, "Требуются права Супер-Администратора.")
     return user
+
+async def increment_admin_revision(db: aiosqlite.Connection) -> int:
+    c = await db.cursor()
+    # Если таблица пустая (первый запуск), вставляем нулевую строку
+    await c.execute("INSERT INTO DbVersion (Revision, AdminRevision) SELECT 0, 0 WHERE NOT EXISTS (SELECT 1 FROM DbVersion)")
+    
+    await c.execute("UPDATE DbVersion SET AdminRevision = AdminRevision + 1")
+    await c.execute("SELECT AdminRevision FROM DbVersion LIMIT 1")
+    row = await c.fetchone()
+    await db.commit()
+    return row[0] if row else 1

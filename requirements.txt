@@ -4,3 +4,5 @@ pydantic
 requests
 aiosqlite
 httpx
+uvicorn[standard] 
+websockets

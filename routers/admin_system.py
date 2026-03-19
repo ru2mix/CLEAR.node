@@ -2,8 +2,10 @@
 import aiosqlite
 import secrets
 import hashlib
+from dependencies import increment_admin_revision
+from ws_router import manager
 from fastapi import APIRouter, Depends, Request
-from cache import auth_cache, tokens_cache, settings_cache, accessible_ids_cache, rights_cache
+from cache import auth_cache, tokens_cache, settings_cache, accessible_ids_cache, rights_cache, users_cache
 from database import get_db
 from dependencies import require_manage_settings, require_read_log, require_superadmin
 from utils import log_event
@@ -48,7 +50,10 @@ async def create_token(req: LocalTokenReq, request: Request, user = Depends(requ
         await c.execute("INSERT INTO UserGroups (UserId, GroupId) VALUES (?, ?)", (token_user_id, def_grp[0]))
 
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     tokens_cache.clear()
+    users_cache.clear()
     await log_event(db, "Настройки", user, request.client.host, f"Создан новый локальный токен: {req.description}")
     return {"status": "ok", "token": raw_token}
 
@@ -57,11 +62,15 @@ async def revoke_token(request: Request, token_id: str, user = Depends(require_m
     c = await db.cursor()
     await c.execute("UPDATE LocalTokens SET IsActive = 0 WHERE Id = ?", (token_id,))
     await c.execute("UPDATE Users SET IsActive = 0 WHERE Id = ?", (f"local_token_{token_id}",))
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
     await log_event(db, "Настройки", user, request.client.host, f"Отключен локальный токен: {token_id}")
     
     auth_cache.clear()
     tokens_cache.clear()
+    users_cache.clear()
     return {"status": "ok"}
 
 @router.post("/tokens/{token_id}/restore")
@@ -69,8 +78,11 @@ async def restore_token(request: Request, token_id: str, user = Depends(require_
     c = await db.cursor()
     await c.execute("UPDATE LocalTokens SET IsActive = 1 WHERE Id = ?", (token_id,))
     await c.execute("UPDATE Users SET IsActive = 1 WHERE Id = ?", (f"local_token_{token_id}",))
+
     await db.commit()
-    
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+
     auth_cache.clear()
     tokens_cache.clear()
     return {"status": "ok"}
@@ -95,7 +107,11 @@ async def save_settings(settings: ServerSettingsReq, request: Request, user = De
     await c.execute("INSERT OR REPLACE INTO ServerSettings (Key, Value) VALUES ('AuditRetentionDays', ?)", (str(settings.audit_retention_days),))
     await c.execute("INSERT OR REPLACE INTO ServerSettings (Key, Value) VALUES ('DeletedRetentionDays', ?)", (str(settings.deleted_retention_days),))
     await c.execute("INSERT OR REPLACE INTO ServerSettings (Key, Value) VALUES ('DefaultGroupId', ?)", (settings.default_group_id,))
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+
     await log_event(db, "Настройки", user, request.client.host, "Изменены системные настройки.")
     settings_cache.clear()
     return {"status": "ok"}
@@ -105,9 +121,12 @@ async def wipe_database(request: Request, user = Depends(require_superadmin), db
     c = await db.cursor()
     await c.execute("UPDATE DbVersion SET Revision = Revision + 1")
     await c.execute("UPDATE Entities SET Deleted = 1, EncryptedData = '', Revision = (SELECT Revision FROM DbVersion LIMIT 1)")
+
     await db.commit()
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+
     await log_event(db, "Удаление", user, request.client.host, "ВНИМАНИЕ: ПРОИЗВЕДЕНА ПОЛНАЯ ОЧИСТКА ВСЕХ ДАННЫХ СЕРВЕРА!")
-    
     accessible_ids_cache.clear()
     rights_cache.clear()
     return {"status": "ok"}

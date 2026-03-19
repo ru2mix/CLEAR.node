@@ -43,7 +43,8 @@ async def init_db():
         except: pass
         try: await c.execute("ALTER TABLE LocalTokens ADD COLUMN IsActive INTEGER DEFAULT 1")
         except: pass
-        
+        try: await c.execute("ALTER TABLE DbVersion ADD COLUMN AdminRevision INTEGER DEFAULT 0")
+        except: pass
         await c.execute("SELECT Value FROM ServerSettings WHERE Key = 'MasterKey'")
         if not await c.fetchone():
             master_key = secrets.token_urlsafe(32)
