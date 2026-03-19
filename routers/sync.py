@@ -1,11 +1,12 @@
-
 import aiosqlite
+from ws_router import manager
 from cache import workspace_key_cache, rights_cache, accessible_ids_cache
 from fastapi import APIRouter, Depends, HTTPException, Request
 from database import get_db
 from dependencies import verify_user
 from utils import get_user_id, log_event
 from models import SyncRequest
+
 
 router = APIRouter(prefix="/sync", tags=["Sync"])
 
@@ -308,4 +309,5 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
     await log_event(db, "Изменение данных", user, request.client.host, f"Успешно обработано {processed_count} из {len(req.entities)} объектов.")
     
     accessible_ids_cache.clear() 
+    await manager.broadcast({"event": "new_revision", "revision": new_rev})
     return {"status": "ok", "new_revision": new_rev, "conflicts": []}
