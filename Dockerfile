@@ -3,6 +3,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-VOLUME ["/app/database.db", "/app/Logs"]
+VOLUME ["/database.db", "/app/Logs"]
 EXPOSE 8001
 CMD ["python", "main.py"]

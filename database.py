@@ -1,6 +1,8 @@
-
+import os
 import aiosqlite
 import secrets
+import shutil
+from pathlib import Path
 from config import DB_PATH
 
 async def get_db():
@@ -8,6 +10,40 @@ async def get_db():
         yield conn
 
 async def init_db():
+# --- НАДЕЖНАЯ АВТОМИГРАЦИЯ (КОПИРОВАНИЕ + БЭКАП) ---
+    old_db = Path("database.db")
+    new_db = Path(DB_PATH)
+
+    if old_db.exists() and not new_db.exists():
+        print("\n" + "="*50)
+        print("🔄 ОБНАРУЖЕНА СТАРАЯ БАЗА. НАЧИНАЮ МИГРАЦИЮ...")
+        
+        new_db.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            for ext in ["", "-wal", "-shm"]:
+                old_file = Path(f"database.db{ext}")
+                new_file = Path(f"{DB_PATH}{ext}")
+                
+                if old_file.exists():
+                    # 1. Копируем в новую папку data/
+                    shutil.copy2(old_file, new_file)
+                    
+                    # 2. Переименовываем оригинал в корне, добавляя .bak
+                    bak_file = old_file.with_name(old_file.name + ".bak")
+                    # Если старый бэкап уже почему-то существует, удаляем его, чтобы не было ошибки
+                    if bak_file.exists():
+                        bak_file.unlink()
+                    old_file.rename(bak_file)
+                    
+                    print(f"  -> {old_file.name} скопирован в data/ и переименован в {bak_file.name}")
+                    
+            print("✅ МИГРАЦИЯ ЗАВЕРШЕНА УСПЕШНО")
+        except Exception as e:
+            print(f"❌ ОШИБКА МИГРАЦИИ: {e}")
+        print("="*50 + "\n")
+    # ---------------------------------------------------
+
     async with aiosqlite.connect(DB_PATH, timeout=15.0) as conn:
         c = await conn.cursor()
         
