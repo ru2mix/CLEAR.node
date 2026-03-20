@@ -41,4 +41,4 @@ P.P.S. - Если на LINUX возникнет ошибка запуска ск
 Докер:
 
 
-`docker run -d --name clear-node-server -e HOST="0.0.0.0" -e PORT="9050" -p 9050:9050 -v clear_db:/app/data -v clear_logs:/app/Logs ghcr.io/ru2mix/clear-node:latest`
+`docker run -d --name clear-node-server -e HOST="0.0.0.0" -e PORT="8001" -p 8001:8001 -v clear_db:/app/data -v clear_logs:/app/Logs ghcr.io/ru2mix/clear-node:latest`
