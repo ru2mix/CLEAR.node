@@ -14,7 +14,10 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
 
-app = FastAPI(title="CLEAR.node - Enterprise Edition", lifespan=lifespan)
+app = FastAPI(title="CLEAR.node", lifespan=lifespan)
+
+#app = FastAPI(title="CLEAR.node", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
 
 app.include_router(sync.router)
 app.include_router(admin_users.router)
