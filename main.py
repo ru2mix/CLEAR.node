@@ -1,3 +1,4 @@
+import os
 import uvicorn
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
@@ -22,4 +23,7 @@ app.include_router(admin_system.router)
 app.include_router(ws_router)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
+    app_host = os.getenv("HOST", "0.0.0.0")
+    app_port = int(os.getenv("PORT", 8001))
+    
+    uvicorn.run("main:app", host=app_host, port=app_port, reload=False)
