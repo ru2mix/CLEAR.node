@@ -143,6 +143,35 @@ async def set_permission(perm: PermissionSetReq, request: Request, user = Depend
     accessible_ids_cache.clear()
     return {"status": "ok"}
 
+@router.post("/groups/{group_id}/permissions/bulk")
+async def save_group_permissions_bulk(
+    group_id: str,
+    permissions: list[PermissionSetReq],
+    request: Request,
+    user = Depends(require_manage_roles),
+    db: aiosqlite.Connection = Depends(get_db)
+):
+    c = await db.cursor()
+    
+    await c.execute("DELETE FROM EntityPermissions WHERE GroupId = ?", (group_id,))
+
+    if permissions:
+        query = "INSERT INTO EntityPermissions (GroupId, EntityId, AccessLevel) VALUES (?, ?, ?)"
+        values = [(group_id, p.entity_id, p.access_level) for p in permissions]
+        await c.executemany(query, values)
+        
+    await db.commit()
+    
+    await log_event(db, "Изменение прав", user, request.client.host, f"Массовое обновление прав для группы {group_id}")
+    
+    new_admin_rev = await increment_admin_revision(db)
+    await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+    
+    rights_cache.clear()
+    accessible_ids_cache.clear()
+    
+    return {"status": "ok"}
+
 @router.post("/invite")
 async def invite_user(req: InviteReq, request: Request, user = Depends(require_manage_roles), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
