@@ -157,7 +157,7 @@ async def save_group_permissions_bulk(
 
     if permissions:
         query = "INSERT INTO EntityPermissions (GroupId, EntityId, AccessLevel) VALUES (?, ?, ?)"
-        values = [(group_id, p["entity_id"], p["access_level"]) for p in permissions]
+        values = [(group_id, p.entity_id, p.access_level) for p in permissions]
         await c.executemany(query, values)
         
     await db.commit()

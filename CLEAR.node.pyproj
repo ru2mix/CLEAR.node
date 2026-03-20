@@ -1,0 +1,65 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>5cfc013e-440f-4f21-8984-0d26a56c9af0</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>main.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>CLEAR.node</Name>
+    <RootNamespace>CLEAR.node</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="cache.py" />
+    <Compile Include="config.py" />
+    <Compile Include="database.py" />
+    <Compile Include="dependencies.py" />
+    <Compile Include="logger.py" />
+    <Compile Include="main.py" />
+    <Compile Include="models.py" />
+    <Compile Include="routers\admin_groups.py" />
+    <Compile Include="routers\admin_system.py" />
+    <Compile Include="routers\admin_users.py" />
+    <Compile Include="routers\sync.py" />
+    <Compile Include="utils.py" />
+    <Compile Include="ws_router.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include=".editorconfig" />
+    <Content Include="requirements.txt" />
+    <Content Include="routers\.editorconfig" />
+    <Content Include="routers\__pycache__\admin_groups.cpython-310.pyc" />
+    <Content Include="routers\__pycache__\admin_system.cpython-310.pyc" />
+    <Content Include="routers\__pycache__\admin_users.cpython-310.pyc" />
+    <Content Include="routers\__pycache__\sync.cpython-310.pyc" />
+    <Content Include="_run.bat" />
+    <Content Include="_run.sh" />
+    <Content Include="_setup.bat" />
+    <Content Include="_setup.sh" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="routers\" />
+    <Folder Include="routers\__pycache__\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <!-- Uncomment the CoreCompile target to enable the Build command in
+       Visual Studio and specify your pre- and post-build commands in
+       the BeforeBuild and AfterBuild targets below. -->
+  <!--<Target Name="CoreCompile" />-->
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+</Project>
