@@ -1,4 +1,5 @@
 import aiosqlite
+import asyncio
 from ws_router import manager
 from cache import workspace_key_cache, rights_cache, accessible_ids_cache
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,6 +10,8 @@ from models import SyncRequest
 
 
 router = APIRouter(prefix="/sync", tags=["Sync"])
+
+db_write_lock = asyncio.Lock()
 
 @router.get("/workspace_key")
 async def get_workspace_key(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
@@ -255,7 +258,7 @@ async def pull_data(since_revision: int = 0, request: Request = None, user = Dep
 async def push_data(req: SyncRequest, request: Request, user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
     user_id = get_user_id(user)
-
+    #Права
     await c.execute("SELECT IsApproved FROM Users WHERE Id = ?", (user_id,))
     row = await c.fetchone()
     if not row or not row[0]: 
@@ -276,38 +279,53 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
     else:
         is_super = can_add = can_edit = can_delete = True
 
-    await c.execute("UPDATE DbVersion SET Revision = Revision + 1")
-    await c.execute("SELECT Revision FROM DbVersion LIMIT 1")
-    new_rev_row = await c.fetchone()
-    new_rev = new_rev_row[0]
-    
     await c.execute("SELECT GroupId FROM UserGroups WHERE UserId = ?", (user_id,))
     user_groups_rows = await c.fetchall()
     user_groups = [r[0] for r in user_groups_rows]
 
     processed_count = 0
-    for item in req.entities:
-        del_int = 1 if item.deleted else 0
-        await c.execute("SELECT 1 FROM Entities WHERE Id = ?", (item.id,))
-        exists = await c.fetchone() is not None
 
-        if not is_super:
-            if del_int == 1 and not can_delete: continue  
-            if exists and del_int == 0 and not can_edit: continue 
-            if not exists and not can_add: continue 
+    #Очередь SQL
+    async with db_write_lock:
+        try:
+            await c.execute("BEGIN IMMEDIATE")
+            await c.execute("UPDATE DbVersion SET Revision = Revision + 1")
+            await c.execute("SELECT Revision FROM DbVersion LIMIT 1")
+            new_rev_row = await c.fetchone()
+            new_rev = new_rev_row[0]
 
-        processed_count += 1
-        if exists:
-            await c.execute("UPDATE Entities SET FolderId = ?, EncryptedData = ?, Revision = ?, Deleted = ? WHERE Id = ?", (item.folder_id, item.encrypted_data, new_rev, del_int, item.id))
-        else: 
-            await c.execute("INSERT INTO Entities (Id, FolderId, EncryptedData, Deleted, Revision) VALUES (?, ?, ?, ?, ?)", (item.id, item.folder_id, item.encrypted_data, del_int, new_rev))
-            if not item.folder_id:
-                for g in user_groups:
-                    await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'Чтение / Запись')", (item.id, g))
-    
-    await db.commit()
+            for item in req.entities:
+                del_int = 1 if item.deleted else 0
+                await c.execute("SELECT 1 FROM Entities WHERE Id = ?", (item.id,))
+                exists = await c.fetchone() is not None
+
+                if not is_super:
+                    if del_int == 1 and not can_delete: continue  
+                    if exists and del_int == 0 and not can_edit: continue 
+                    if not exists and not can_add: continue 
+
+                processed_count += 1
+                if exists:
+                    await c.execute("UPDATE Entities SET FolderId = ?, EncryptedData = ?, Revision = ?, Deleted = ? WHERE Id = ?", (item.folder_id, item.encrypted_data, new_rev, del_int, item.id))
+                else: 
+                    await c.execute("INSERT INTO Entities (Id, FolderId, EncryptedData, Deleted, Revision) VALUES (?, ?, ?, ?, ?)", (item.id, item.folder_id, item.encrypted_data, del_int, new_rev))
+                    if not item.folder_id:
+                        for g in user_groups:
+                            await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'Чтение / Запись')", (item.id, g))
+            
+            # Фиксируем всю пачку данных разом
+            await db.commit()
+            
+        except Exception as e:
+            # Если что-то пошло не так (например, обрыв), откатываем БД назад
+            await db.rollback()
+            print(f"Ошибка базы данных при записи: {e}")
+            raise HTTPException(500, "Ошибка записи в базу данных.")
+
+    #Освобождаем
     await log_event(db, "Изменение данных", user, request.client.host, f"Успешно обработано {processed_count} из {len(req.entities)} объектов.")
     
     accessible_ids_cache.clear() 
     await manager.broadcast({"event": "new_revision", "revision": new_rev})
+    
     return {"status": "ok", "new_revision": new_rev, "conflicts": []}
