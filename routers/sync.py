@@ -258,7 +258,7 @@ async def pull_data(since_revision: int = 0, request: Request = None, user = Dep
 async def push_data(req: SyncRequest, request: Request, user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
     user_id = get_user_id(user)
-    #Права
+
     await c.execute("SELECT IsApproved FROM Users WHERE Id = ?", (user_id,))
     row = await c.fetchone()
     if not row or not row[0]: 
@@ -284,8 +284,8 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
     user_groups = [r[0] for r in user_groups_rows]
 
     processed_count = 0
-
-    #Очередь SQL
+    
+    await db.commit() 
     async with db_write_lock:
         try:
             await c.execute("BEGIN IMMEDIATE")
@@ -313,17 +313,14 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
                         for g in user_groups:
                             await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'Чтение / Запись')", (item.id, g))
             
-            # Фиксируем всю пачку данных разом
             await db.commit()
-            
+            await log_event(db, "Изменение данных", user, request.client.host, f"Успешно обработано {processed_count} из {len(req.entities)} объектов.")
         except Exception as e:
-            # Если что-то пошло не так (например, обрыв), откатываем БД назад
             await db.rollback()
             print(f"Ошибка базы данных при записи: {e}")
             raise HTTPException(500, "Ошибка записи в базу данных.")
 
-    #Освобождаем
-    await log_event(db, "Изменение данных", user, request.client.host, f"Успешно обработано {processed_count} из {len(req.entities)} объектов.")
+    
     
     accessible_ids_cache.clear() 
     await manager.broadcast({"event": "new_revision", "revision": new_rev})
