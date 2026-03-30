@@ -10,10 +10,11 @@ async def get_db():
         yield conn
 
 async def init_db():
+    
 # --- НАДЕЖНАЯ АВТОМИГРАЦИЯ (КОПИРОВАНИЕ + БЭКАП) ---
     old_db = Path("database.db")
     new_db = Path(DB_PATH)
-
+    new_db.parent.mkdir(parents=True, exist_ok=True)
     if old_db.exists() and not new_db.exists():
         print("\n" + "="*50)
         print("🔄 ОБНАРУЖЕНА СТАРАЯ БАЗА. НАЧИНАЮ МИГРАЦИЮ...")
