@@ -2,7 +2,7 @@ import aiosqlite
 from dependencies import increment_admin_revision, require_manage_users, require_manage_roles
 from ws_router import manager
 from fastapi import APIRouter, Depends, Request, HTTPException
-from cache import auth_cache, rights_cache, accessible_ids_cache, users_cache, pending_cache
+from cache import auth_cache, rights_cache, accessible_ids_cache, users_cache, pending_cache, groups_cache
 from database import get_db
 from utils import log_event, get_user_id
 from models import UserGroupUpdate
@@ -99,7 +99,7 @@ async def restore_pending_user(target_user_id: str, request: Request, user = Dep
     users_cache.clear() 
     return {"status": "ok"}
 
-@router.post("/users/{target_user_id}/group")
+@router.put("/users/{target_user_id}/group")
 async def set_user_group(target_user_id: str, req: UserGroupUpdate, request: Request, user = Depends(require_manage_roles), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
     
