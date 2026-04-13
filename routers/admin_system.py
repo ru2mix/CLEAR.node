@@ -19,11 +19,8 @@ async def get_tokens(user = Depends(require_manage_settings), db: aiosqlite.Conn
     if cached_tokens: return cached_tokens
 
     c = await db.cursor()
-    # ДОБАВЛЕНО: Достаем колонку IsActive из базы
     await c.execute("SELECT Id, Description, ExpiresAt, CreatedAt, IsActive FROM LocalTokens")
     rows = await c.fetchall()
-    
-    # ДОБАВЛЕНО: Передаем is_active в итоговый JSON (конвертируем 0/1 в bool)
     result = [{
         "id": r[0], 
         "description": r[1], 
