@@ -7,7 +7,7 @@ from database import get_db
 from dependencies import verify_user
 from utils import get_user_id, log_event
 from models import SyncRequest
-
+from datetime import datetime
 
 router = APIRouter(prefix="/sync", tags=["Sync"])
 
@@ -135,11 +135,18 @@ async def get_my_rights(user = Depends(verify_user), db: aiosqlite.Connection = 
     return r
 
 @router.get("/revision")
-async def get_revision(request: Request, user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
+async def get_revision(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
+    user_id = get_user_id(user)
+    try:
+        c = await db.cursor()
+        await c.execute("UPDATE Users SET LastConnect = ? WHERE Id = ?", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id))
+        await db.commit()
+    except Exception:
+        pass
     c = await db.cursor()
     await c.execute("SELECT Revision FROM DbVersion LIMIT 1")
-    row = await c.fetchone()
-    return {"revision": row[0] if row else 0}
+    rev_row = await c.fetchone()
+    return {"revision": rev_row[0] if rev_row else 0}
 
 @router.get("/accessible_ids")
 async def get_accessible_ids(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):

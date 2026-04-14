@@ -6,29 +6,56 @@ from cache import auth_cache, rights_cache, accessible_ids_cache, users_cache, p
 from database import get_db
 from utils import log_event, get_user_id
 from models import UserGroupUpdate
+from ws_router import manager
+from datetime import datetime
 
 router = APIRouter(prefix="/admin", tags=["Admin Users"])
 
 @router.get("/users")
 async def get_all_users(user = Depends(require_manage_users), db: aiosqlite.Connection = Depends(get_db)):
     cached_users = users_cache.get("all")
-    if cached_users: return cached_users
-
-    c = await db.cursor()
-    try:
-        await c.execute("""
-            SELECT u.Id, u.Username, u.Email, u.LastConnect, ug.GroupId, u.IsActive 
-            FROM Users u 
-            LEFT JOIN UserGroups ug ON u.Id = ug.UserId 
-            WHERE u.IsApproved = 1 ORDER BY u.LastConnect DESC
-        """)
-        rows = await c.fetchall()
-        result = [{"id": r[0], "username": r[1], "email": r[2], "last_connect": r[3], "group_id": r[4] if r[4] else "", "is_active": bool(r[5] if r[5] is not None else 1)} for r in rows]
-    except Exception as e:
-        print(f"Error fetching users: {e}")
-        result = []
     
-    users_cache.set("all", result)
+    if not cached_users:
+        c = await db.cursor()
+        try:
+            await c.execute("""
+                SELECT u.Id, u.Username, u.Email, u.LastConnect, ug.GroupId, u.IsActive 
+                FROM Users u 
+                LEFT JOIN UserGroups ug ON u.Id = ug.UserId 
+                WHERE u.IsApproved = 1 ORDER BY u.LastConnect DESC
+            """)
+            rows = await c.fetchall()
+            
+            cached_users = [{
+                "id": r[0], 
+                "username": r[1], 
+                "email": r[2], 
+                "last_connect": r[3], 
+                "group_id": r[4] if r[4] else "", 
+                "is_active": bool(r[5] if r[5] is not None else 1)
+            } for r in rows]
+            
+            users_cache.set("all", cached_users)
+            
+        except Exception as e:
+            print(f"Ошибка БД при получении пользователей: {e}")
+            return []
+
+    result = []
+    now = datetime.now()
+    for u in cached_users:
+        user_data = dict(u)
+        is_online = False
+        if user_data["last_connect"]:
+            try:
+                last_time = datetime.strptime(user_data["last_connect"], "%Y-%m-%d %H:%M:%S")
+                if (now - last_time).total_seconds() < 15: 
+                    is_online = True
+            except:
+                pass
+        user_data["is_online"] = is_online
+        result.append(user_data)
+
     return result
 
 @router.get("/pending_users")

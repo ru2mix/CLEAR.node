@@ -152,20 +152,47 @@ async def save_group_permissions_bulk(
     db: aiosqlite.Connection = Depends(get_db)
 ):
     c = await db.cursor()
-    
+
+    await c.execute("SELECT EntityId FROM EntityPermissions WHERE GroupId = ?", (group_id,))
+    old_ids = [r[0] for r in await c.fetchall()]
+    new_ids = [p.entity_id for p in permissions] if permissions else []
+    affected_ids = list(set(old_ids + new_ids))
+
     await c.execute("DELETE FROM EntityPermissions WHERE GroupId = ?", (group_id,))
 
     if permissions:
         query = "INSERT INTO EntityPermissions (GroupId, EntityId, AccessLevel) VALUES (?, ?, ?)"
         values = [(group_id, p.entity_id, p.access_level) for p in permissions]
         await c.executemany(query, values)
+
+    await c.execute("INSERT INTO DbVersion (Revision) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM DbVersion)")
+    await c.execute("UPDATE DbVersion SET Revision = Revision + 1")
+    await c.execute("SELECT Revision FROM DbVersion LIMIT 1")
+
+    new_rev = (await c.fetchone())[0]
+
+    if affected_ids:
+        placeholders = ",".join("?" * len(affected_ids))
+        query_params = [new_rev] + affected_ids
+        await c.execute(f"""
+            UPDATE Entities SET Revision = ? WHERE Id IN (
+                WITH RECURSIVE children AS (
+                    SELECT Id FROM Entities WHERE Id IN ({placeholders})
+                    UNION ALL
+                    SELECT e.Id FROM Entities e JOIN children c ON e.FolderId = c.Id
+                )
+                SELECT Id FROM children
+            )
+        """, query_params)
         
     await db.commit()
     
     await log_event(db, "Изменение прав", user, request.client.host, f"Массовое обновление прав для группы {group_id}")
-    
+
     new_admin_rev = await increment_admin_revision(db)
     await manager.broadcast({"event": "admin_revision", "revision": new_admin_rev})
+
+    await manager.broadcast({"event": "new_revision", "revision": new_rev})
     
     rights_cache.clear()
     accessible_ids_cache.clear()

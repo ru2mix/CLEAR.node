@@ -11,7 +11,6 @@ async def get_db():
 
 async def init_db():
     
-# --- НАДЕЖНАЯ АВТОМИГРАЦИЯ (КОПИРОВАНИЕ + БЭКАП) ---
     old_db = Path("database.db")
     new_db = Path(DB_PATH)
     new_db.parent.mkdir(parents=True, exist_ok=True)
@@ -25,14 +24,9 @@ async def init_db():
             for ext in ["", "-wal", "-shm"]:
                 old_file = Path(f"database.db{ext}")
                 new_file = Path(f"{DB_PATH}{ext}")
-                
                 if old_file.exists():
-                    # 1. Копируем в новую папку data/
                     shutil.copy2(old_file, new_file)
-                    
-                    # 2. Переименовываем оригинал в корне, добавляя .bak
                     bak_file = old_file.with_name(old_file.name + ".bak")
-                    # Если старый бэкап уже почему-то существует, удаляем его, чтобы не было ошибки
                     if bak_file.exists():
                         bak_file.unlink()
                     old_file.rename(bak_file)
