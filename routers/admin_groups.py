@@ -113,12 +113,13 @@ async def get_permissions(user = Depends(require_manage_roles), db: aiosqlite.Co
 @router.post("/permissions")
 async def set_permission(perm: PermissionSetReq, request: Request, user = Depends(require_manage_roles), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
+    acc_level = normalize_access_level(perm.access_level)
     await c.execute("SELECT AccessLevel FROM EntityPermissions WHERE EntityId = ? AND GroupId = ?", (perm.entity_id, perm.group_id))
     current_perm = await c.fetchone()
-    if current_perm and current_perm[0] == perm.access_level:
+    if current_perm and current_perm[0] == acc_level:
         return {"status": "ok"}
         
-    await c.execute("INSERT OR REPLACE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, ?)", (perm.entity_id, perm.group_id, perm.access_level))
+    await c.execute("INSERT OR REPLACE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, ?)", (perm.entity_id, perm.group_id, acc_level))
     
     await c.execute("UPDATE DbVersion SET Revision = Revision + 1")
     await c.execute("SELECT Revision FROM DbVersion LIMIT 1")
@@ -162,7 +163,7 @@ async def save_group_permissions_bulk(
 
     if permissions:
         query = "INSERT INTO EntityPermissions (GroupId, EntityId, AccessLevel) VALUES (?, ?, ?)"
-        values = [(group_id, p.entity_id, p.access_level) for p in permissions]
+        values = [(group_id, p.entity_id, normalize_access_level(p.access_level)) for p in permissions]
         await c.executemany(query, values)
 
     await c.execute("INSERT INTO DbVersion (Revision) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM DbVersion)")
@@ -239,3 +240,11 @@ async def set_group_users(group_id: str, req: GroupUsersReq, request: Request, u
     rights_cache.clear()
     accessible_ids_cache.clear()
     return {"status": "ok"}
+    
+def normalize_access_level(level: str) -> str:
+    mapping = {
+        'Нет доступа': 'none',
+        'Чтение': 'read',
+        'Чтение / Запись': 'write'
+    }
+    return mapping.get(level, level)

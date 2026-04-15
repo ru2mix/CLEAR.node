@@ -23,20 +23,20 @@ async def verify_user(authorization: str = Header(...), db: aiosqlite.Connection
         c = await db.cursor()
         await c.execute("SELECT Description, ExpiresAt, Id FROM LocalTokens WHERE TokenHash = ?", (token_hash,))
         row = await c.fetchone()
-        if not row: raise HTTPException(401, "Неверный или удаленный локальный токен")
+        if not row: raise HTTPException(401, "Invalid or deleted local token")
         
         try:
             await c.execute("SELECT IsActive FROM LocalTokens WHERE TokenHash = ?", (token_hash,))
             act_row = await c.fetchone()
             if act_row and act_row[0] is not None and not bool(act_row[0]):
-                raise HTTPException(403, "Токен отключен")
+                raise HTTPException(403, "Token is disabled")
         except HTTPException:
             raise 
         except Exception:
             pass
             
         if row[1] and datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S") < datetime.now():
-            raise HTTPException(401, "Срок действия локального токена истек")
+            raise HTTPException(401, "Local token has expired")
             
         result = {"email": f"local_token_{row[2]}", "username": f"Token: {row[0]}", "is_local_token": True}
         auth_cache.set(token, result)
@@ -57,14 +57,14 @@ async def verify_user(authorization: str = Header(...), db: aiosqlite.Connection
                 )
                 
                 if resp.status_code != 200: 
-                    print(f"\n[ОШИБКА АВТОРИЗАЦИИ] Центральный сервер вернул {resp.status_code}: {resp.text}\n")
+                    print(f"\n[AUTH ERROR] Central server returned {resp.status_code}: {resp.text}\n")
                     raise HTTPException(401, "Invalid token from central auth")
                     
                 user_data = resp.json()
                 user_data["is_local_token"] = False 
                 
         except httpx.RequestError as e:
-            print(f"\n[СЕТЕВАЯ ОШИБКА] Не удалось подключиться к центральному серверу: {e}\n")
+            print(f"\n[NETWORK ERROR] Failed to connect to central auth server: {e}\n")
             raise HTTPException(401, "Central auth server unavailable")
             
         try:
@@ -72,7 +72,7 @@ async def verify_user(authorization: str = Header(...), db: aiosqlite.Connection
             await c.execute("SELECT IsActive FROM Users WHERE Id = ?", (get_user_id(user_data),))
             act_row = await c.fetchone()
             if act_row and act_row[0] is not None and not bool(act_row[0]):
-                raise HTTPException(403, "Учетная запись отключена")
+                raise HTTPException(403, "User account is disabled")
         except HTTPException:
             raise
         except Exception:
@@ -82,53 +82,52 @@ async def verify_user(authorization: str = Header(...), db: aiosqlite.Connection
         return user_data
 
 async def require_manage_roles(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
-    if user.get("is_local_token"): raise HTTPException(403, "Локальным токенам запрещен доступ.")
+    if user.get("is_local_token"): raise HTTPException(403, "Access denied for local tokens")
     user_id = get_user_id(user)
     c = await db.cursor()
     await c.execute("""SELECT 1 FROM Groups g JOIN UserGroups ug ON g.Id = ug.GroupId 
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND (g.IsSuperAdmin = 1 OR g.CanManageRoles = 1)""", (user_id,))
-    if not await c.fetchone(): raise HTTPException(403, "Нет прав на управление ролями и доступом.")
+    if not await c.fetchone(): raise HTTPException(403, "Insufficient permissions to manage roles and access")
     return user
 
 async def require_manage_users(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
-    if user.get("is_local_token"): raise HTTPException(403, "Локальным токенам запрещен доступ.")
+    if user.get("is_local_token"): raise HTTPException(403, "Access denied for local tokens")
     user_id = get_user_id(user)
     c = await db.cursor()
     await c.execute("""SELECT 1 FROM Groups g JOIN UserGroups ug ON g.Id = ug.GroupId 
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND (g.IsSuperAdmin = 1 OR g.CanManageUsers = 1)""", (user_id,))
-    if not await c.fetchone(): raise HTTPException(403, "Нет прав на управление пользователями.")
+    if not await c.fetchone(): raise HTTPException(403, "Insufficient permissions to manage roles and access")
     return user
 
 async def require_manage_settings(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
-    if user.get("is_local_token"): raise HTTPException(403, "Локальным токенам запрещен доступ.")
+    if user.get("is_local_token"): raise HTTPException(403, "Access denied for local tokens")
     user_id = get_user_id(user)
     c = await db.cursor()
     await c.execute("""SELECT 1 FROM Groups g JOIN UserGroups ug ON g.Id = ug.GroupId 
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND (g.IsSuperAdmin = 1 OR g.CanManageSettings = 1)""", (user_id,))
-    if not await c.fetchone(): raise HTTPException(403, "Нет прав на управление настройками.")
+    if not await c.fetchone(): raise HTTPException(403, "Insufficient permissions to manage settings")
     return user
 
 async def require_read_log(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
-    if user.get("is_local_token"): raise HTTPException(403, "Локальным токенам запрещен доступ.")
+    if user.get("is_local_token"): raise HTTPException(403, "Access denied for local tokens")
     user_id = get_user_id(user)
     c = await db.cursor()
     await c.execute("""SELECT 1 FROM Groups g JOIN UserGroups ug ON g.Id = ug.GroupId 
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND (g.IsSuperAdmin = 1 OR g.CanReadLog = 1)""", (user_id,))
-    if not await c.fetchone(): raise HTTPException(403, "Нет прав на чтение журнала событий.")
+    if not await c.fetchone(): raise HTTPException(403, "Insufficient permissions to read event logs")
     return user
 
 async def require_superadmin(user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
-    if user.get("is_local_token"): raise HTTPException(403, "Локальным токенам запрещен доступ.")
+    if user.get("is_local_token"): raise HTTPException(403, "Access denied for local tokens")
     user_id = get_user_id(user)
     c = await db.cursor()
     await c.execute("""SELECT 1 FROM Groups g JOIN UserGroups ug ON g.Id = ug.GroupId 
                  WHERE ug.UserId = ? AND g.IsDeleted = 0 AND g.IsSuperAdmin = 1""", (user_id,))
-    if not await c.fetchone(): raise HTTPException(403, "Требуются права Супер-Администратора.")
+    if not await c.fetchone(): raise HTTPException(403, "Super-Admin privileges required")
     return user
 
 async def increment_admin_revision(db: aiosqlite.Connection) -> int:
     c = await db.cursor()
-    # Если таблица пустая (первый запуск), вставляем нулевую строку
     await c.execute("INSERT INTO DbVersion (Revision, AdminRevision) SELECT 0, 0 WHERE NOT EXISTS (SELECT 1 FROM DbVersion)")
     
     await c.execute("UPDATE DbVersion SET AdminRevision = AdminRevision + 1")

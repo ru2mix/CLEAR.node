@@ -26,9 +26,9 @@ async def get_workspace_key(user = Depends(verify_user), db: aiosqlite.Connectio
     urow = await c.fetchone()
     
     if not urow or not urow[0]: 
-        raise HTTPException(403, "Нет доступа к ключу рабочей области (не одобрен)")
+        raise HTTPException(403, "No access to workspace key (not approved)")
     if urow[1] is not None and not bool(urow[1]): 
-        raise HTTPException(403, "Учетная запись отключена")
+        raise HTTPException(403, "Account disabled")
         
     await c.execute("SELECT Value FROM ServerSettings WHERE Key = 'MasterKey'")
     row = await c.fetchone()
@@ -77,7 +77,7 @@ async def get_my_rights(user = Depends(verify_user), db: aiosqlite.Connection = 
             await c.execute("SELECT IsActive FROM Users WHERE Id = ?", (user_id,))
             act_row = await c.fetchone()
             if act_row and act_row[0] is not None and not bool(act_row[0]):
-                raise HTTPException(403, "Учетная запись отключена администратором")
+                raise HTTPException(403, "Account disabled by administrator")
         except HTTPException:
             raise
         except Exception:
@@ -110,7 +110,7 @@ async def get_my_rights(user = Depends(verify_user), db: aiosqlite.Connection = 
         EntityAccess AS (
             SELECT e.Id, e.FolderId,
                 CASE WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN 1 ELSE 0 END AS HasRestrict,
-                COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'Чтение' THEN 3 END LIMIT 1), 'Наследуется') AS DirectAccess
+                COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'none' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'write' THEN 2 WHEN 'Чтение' THEN 3 WHEN 'read' THEN 3 END LIMIT 1), 'inherited') AS DirectAccess
             FROM Entities e
             WHERE e.FolderId = '' OR e.FolderId IS NULL OR NOT EXISTS (SELECT 1 FROM Entities p WHERE p.Id = e.FolderId)
 
@@ -120,13 +120,13 @@ async def get_my_rights(user = Depends(verify_user), db: aiosqlite.Connection = 
                 CASE WHEN ea.HasRestrict = 1 OR EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN 1 ELSE 0 END,
                 CASE
                     WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN
-                        COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'Чтение' THEN 3 END LIMIT 1), 'Наследуется')
+                        COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'none' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'write' THEN 2 WHEN 'Чтение' THEN 3 WHEN 'read' THEN 3 END LIMIT 1), 'inherited')
                     ELSE ea.DirectAccess
                 END
             FROM Entities e
             JOIN EntityAccess ea ON e.FolderId = ea.Id
         )
-        SELECT Id, DirectAccess FROM EntityAccess WHERE DirectAccess IN ('Чтение', 'Чтение / Запись')
+        SELECT Id, DirectAccess FROM EntityAccess WHERE DirectAccess IN ('Чтение', 'Чтение / Запись', 'read', 'write')
         """, (user_id, user_id))
         rows_folders = await c.fetchall()
         r["folders"] = {row[0]: row[1] for row in rows_folders}
@@ -172,8 +172,8 @@ async def get_accessible_ids(user = Depends(verify_user), db: aiosqlite.Connecti
             SELECT e.Id, e.FolderId,
                 CASE WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN 1 ELSE 0 END AS HasRestrict,
                 CASE 
-                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel = 'Нет доступа' AND g.IsDeleted = 0) THEN 0
-                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись') AND g.IsDeleted = 0) THEN 1 
+                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
+                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
                     ELSE 0 
                 END AS HasAccess
             FROM Entities e
@@ -186,8 +186,8 @@ async def get_accessible_ids(user = Depends(verify_user), db: aiosqlite.Connecti
                 CASE
                     WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN
                         CASE 
-                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel = 'Нет доступа' AND g.IsDeleted = 0) THEN 0
-                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись') AND g.IsDeleted = 0) THEN 1 
+                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
+                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
                             ELSE 0 
                         END
                     ELSE ea.HasAccess
@@ -228,8 +228,8 @@ async def pull_data(since_revision: int = 0, request: Request = None, user = Dep
             SELECT e.Id, e.FolderId,
                 CASE WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN 1 ELSE 0 END AS HasRestrict,
                 CASE 
-                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel = 'Нет доступа' AND g.IsDeleted = 0) THEN 0
-                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись') AND g.IsDeleted = 0) THEN 1 
+                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
+                    WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
                     ELSE 0 
                 END AS HasAccess
             FROM Entities e
@@ -242,8 +242,8 @@ async def pull_data(since_revision: int = 0, request: Request = None, user = Dep
                 CASE
                     WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN
                         CASE 
-                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel = 'Нет доступа' AND g.IsDeleted = 0) THEN 0
-                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись') AND g.IsDeleted = 0) THEN 1 
+                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
+                            WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
                             ELSE 0 
                         END
                     ELSE ea.HasAccess
@@ -269,7 +269,7 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
     await c.execute("SELECT IsApproved FROM Users WHERE Id = ?", (user_id,))
     row = await c.fetchone()
     if not row or not row[0]: 
-        raise HTTPException(403, "Доступ запрещен: пользователь находится в карантине.")
+        raise HTTPException(403, "Access denied: user is in quarantine.")
 
     is_super = can_add = can_edit = can_delete = False
 
@@ -279,8 +279,8 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
                      WHERE ug.UserId = ? AND g.IsDeleted = 0""", (user_id,))
         row = await c.fetchone()
         if not row or (not row[0] and not row[1] and not row[2] and not row[3]):
-            await log_event(db, "Предупреждение", user, request.client.host, "Попытка несанкционированной отправки данных.")
-            raise HTTPException(403, "Нет прав на запись.")
+            await log_event(db, "Warning", user, request.client.host, "Unauthorized data submission attempt.")
+            raise HTTPException(403, "No write permissions.")
         
         is_super, can_add, can_edit, can_delete = bool(row[0]), bool(row[1]), bool(row[2]), bool(row[3])
     else:
@@ -318,14 +318,14 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
                     await c.execute("INSERT INTO Entities (Id, FolderId, EncryptedData, Deleted, Revision) VALUES (?, ?, ?, ?, ?)", (item.id, item.folder_id, item.encrypted_data, del_int, new_rev))
                     if not item.folder_id:
                         for g in user_groups:
-                            await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'Чтение / Запись')", (item.id, g))
+                            await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'write')", (item.id, g))
             
             await db.commit()
-            await log_event(db, "Изменение данных", user, request.client.host, f"Успешно обработано {processed_count} из {len(req.entities)} объектов.")
+            await log_event(db, "Data change", user, request.client.host, f"Successfully processed {processed_count} out of {len(req.entities)} objects.")
         except Exception as e:
             await db.rollback()
-            print(f"Ошибка базы данных при записи: {e}")
-            raise HTTPException(500, "Ошибка записи в базу данных.")
+            print(f"Database error during write: {e}")
+            raise HTTPException(500, "Error writing to database.")
 
     
     

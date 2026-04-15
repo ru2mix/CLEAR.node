@@ -16,7 +16,7 @@ async def init_db():
     new_db.parent.mkdir(parents=True, exist_ok=True)
     if old_db.exists() and not new_db.exists():
         print("\n" + "="*50)
-        print("🔄 ОБНАРУЖЕНА СТАРАЯ БАЗА. НАЧИНАЮ МИГРАЦИЮ...")
+        print("🔄 OLD DATABASE DETECTED. STARTING MIGRATION...")
         
         new_db.parent.mkdir(parents=True, exist_ok=True)
         
@@ -31,14 +31,22 @@ async def init_db():
                         bak_file.unlink()
                     old_file.rename(bak_file)
                     
-                    print(f"  -> {old_file.name} скопирован в data/ и переименован в {bak_file.name}")
+                    print(f"  -> {old_file.name} copied to data/ and renamed to {bak_file.name}")
                     
-            print("✅ МИГРАЦИЯ ЗАВЕРШЕНА УСПЕШНО")
+            print("✅ MIGRATION COMPLETED SUCCESSFULLY")
         except Exception as e:
-            print(f"❌ ОШИБКА МИГРАЦИИ: {e}")
+            print(f"❌ MIGRATION ERROR: {e}")
         print("="*50 + "\n")
     # ---------------------------------------------------
+    try:
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'none' WHERE AccessLevel = 'Нет доступа'")
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'read' WHERE AccessLevel = 'Чтение'")
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'write' WHERE AccessLevel = 'Чтение / Запись'")
+        except Exception as e:
+            print(f"Migration error: {e}")
 
+        await conn.commit()
+    # ---------------------------------------------------
     async with aiosqlite.connect(DB_PATH, timeout=15.0) as conn:
         c = await conn.cursor()
         
