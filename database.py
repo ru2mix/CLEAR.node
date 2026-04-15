@@ -37,16 +37,6 @@ async def init_db():
         except Exception as e:
             print(f"❌ MIGRATION ERROR: {e}")
         print("="*50 + "\n")
-    # ---------------------------------------------------
-    try:
-            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'none' WHERE AccessLevel = 'Нет доступа'")
-            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'read' WHERE AccessLevel = 'Чтение'")
-            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'write' WHERE AccessLevel = 'Чтение / Запись'")
-        except Exception as e:
-            print(f"Migration error: {e}")
-
-        await conn.commit()
-    # ---------------------------------------------------
     async with aiosqlite.connect(DB_PATH, timeout=15.0) as conn:
         c = await conn.cursor()
         
@@ -88,5 +78,14 @@ async def init_db():
         if not await c.fetchone():
             master_key = secrets.token_urlsafe(32)
             await c.execute("INSERT INTO ServerSettings (Key, Value) VALUES ('MasterKey', ?)", (master_key,))
-            
+        
+        # ---------------------------------------------------
+        try:
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'none' WHERE AccessLevel = 'Нет доступа'")
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'read' WHERE AccessLevel = 'Чтение'")
+            await c.execute("UPDATE EntityPermissions SET AccessLevel = 'write' WHERE AccessLevel = 'Чтение / Запись'")
+        except Exception as e:
+            print(f"Migration error: {e}")
+        # ---------------------------------------------------
+        
         await conn.commit()
