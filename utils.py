@@ -16,10 +16,5 @@ async def log_event(db: aiosqlite.Connection, event_type: str, user: dict, ip: s
         c = await db.cursor()
         username = user.get("username", "Unknown")
         email = user.get("email", "")
-    
         await c.execute("INSERT INTO AuditLog (EventType, Username, Email, IpAddress, Details) VALUES (?, ?, ?, ?, ?)", (event_type, username, email, ip, details))
-        await c.execute("SELECT Value FROM ServerSettings WHERE Key = 'AuditRetentionDays'")
-        row = await c.fetchone()
-        retention_days = int(row[0]) if row else 90
-        await c.execute(f"DELETE FROM AuditLog WHERE Timestamp < datetime('now', '-{retention_days} days')")
         await db.commit()

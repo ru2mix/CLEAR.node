@@ -303,6 +303,7 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
 
             for item in req.entities:
                 del_int = 1 if item.deleted else 0
+                deleted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if item.deleted else None
                 await c.execute("SELECT 1 FROM Entities WHERE Id = ?", (item.id,))
                 exists = await c.fetchone() is not None
 
@@ -313,9 +314,9 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
 
                 processed_count += 1
                 if exists:
-                    await c.execute("UPDATE Entities SET FolderId = ?, EncryptedData = ?, Revision = ?, Deleted = ? WHERE Id = ?", (item.folder_id, item.encrypted_data, new_rev, del_int, item.id))
+                    await c.execute("UPDATE Entities SET FolderId = ?, EncryptedData = ?, Revision = ?, Deleted = ?, DeletedAt = ? WHERE Id = ?", (item.folder_id, item.encrypted_data, new_rev, del_int, deleted_at, item.id))
                 else: 
-                    await c.execute("INSERT INTO Entities (Id, FolderId, EncryptedData, Deleted, Revision) VALUES (?, ?, ?, ?, ?)", (item.id, item.folder_id, item.encrypted_data, del_int, new_rev))
+                    await c.execute("INSERT INTO Entities (Id, FolderId, EncryptedData, Deleted, Revision, DeletedAt) VALUES (?, ?, ?, ?, ?, ?)", (item.id, item.folder_id, item.encrypted_data, del_int, new_rev, deleted_at))
                     if not item.folder_id:
                         for g in user_groups:
                             await c.execute("INSERT OR IGNORE INTO EntityPermissions (EntityId, GroupId, AccessLevel) VALUES (?, ?, 'write')", (item.id, g))
@@ -333,3 +334,20 @@ async def push_data(req: SyncRequest, request: Request, user = Depends(verify_us
     await manager.broadcast({"event": "new_revision", "revision": new_rev})
     
     return {"status": "ok", "new_revision": new_rev, "conflicts": []}
+
+@router.get("/deleted")
+async def pull_deleted_entities(since_revision: int = 0, user = Depends(verify_user), db: aiosqlite.Connection = Depends(get_db)):
+    c = await db.cursor()
+    user_id = get_user_id(user)
+    
+    # Проверка, что пользователь авторизован и не в карантине
+    await c.execute("SELECT IsApproved FROM Users WHERE Id = ?", (user_id,))
+    row = await c.fetchone()
+    if not row or not row[0]: 
+        return []
+
+    # Отдаем только те ID, которые были физически удалены после указанной ревизии
+    await c.execute("SELECT Id, Revision FROM DeletedEntities WHERE Revision > ?", (since_revision,))
+    rows = await c.fetchall()
+    
+    return [{"id": r[0], "revision": r[1]} for r in rows]

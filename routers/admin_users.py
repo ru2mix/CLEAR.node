@@ -153,7 +153,10 @@ async def set_user_group(target_user_id: str, req: UserGroupUpdate, request: Req
 @router.delete("/users/{target_user_id}")
 async def ban_user(target_user_id: str, request: Request, user = Depends(require_manage_users), db: aiosqlite.Connection = Depends(get_db)):
     c = await db.cursor()
+
     await c.execute("UPDATE Users SET IsActive = 0 WHERE Id = ?", (target_user_id,))
+    await c.execute("UPDATE LocalTokens SET IsActive = 0 WHERE UserId = ?", (target_user_id,))
+    
     await db.commit()
     
     new_admin_rev = await increment_admin_revision(db)
@@ -165,6 +168,8 @@ async def ban_user(target_user_id: str, request: Request, user = Depends(require
     rights_cache.clear()
     accessible_ids_cache.clear()
     users_cache.clear()
+    tokens_cache.clear() 
+    
     return {"status": "ok"}
 
 @router.post("/users/{target_user_id}/restore")

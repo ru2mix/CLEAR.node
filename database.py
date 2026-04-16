@@ -87,5 +87,11 @@ async def init_db():
         except Exception as e:
             print(f"Migration error: {e}")
         # ---------------------------------------------------
-        
+        await c.execute("CREATE TABLE IF NOT EXISTS DeletedEntities (Id TEXT PRIMARY KEY, Revision INTEGER)")
+        # ---------------------------------------------------
+        try:
+            await c.execute("ALTER TABLE Entities ADD COLUMN DeletedAt DATETIME")
+        except:
+            pass
+        # ---------------------------------------------------
         await conn.commit()

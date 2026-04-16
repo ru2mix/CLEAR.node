@@ -1,4 +1,5 @@
 import os
+import asyncio
 import uvicorn
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
@@ -7,12 +8,21 @@ import logger
 from database import init_db
 from routers import sync, admin_users, admin_groups, admin_system
 from ws_router import router as ws_router
-
+from tasks import background_cleanup_task
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    cleanup_task = asyncio.create_task(background_cleanup_task())
+
     yield
+
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(title="CLEAR.node", lifespan=lifespan)
 
