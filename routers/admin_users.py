@@ -155,7 +155,11 @@ async def ban_user(target_user_id: str, request: Request, user = Depends(require
     c = await db.cursor()
 
     await c.execute("UPDATE Users SET IsActive = 0 WHERE Id = ?", (target_user_id,))
-    await c.execute("UPDATE LocalTokens SET IsActive = 0 WHERE UserId = ?", (target_user_id,))
+    
+    if target_user_id.startswith("local_token_"):
+        token_id = target_user_id.replace("local_token_", "")
+        await c.execute("UPDATE LocalTokens SET IsActive = 0 WHERE Id = ?", (token_id,))
+        users_cache.clear() 
     
     await db.commit()
     
@@ -168,7 +172,6 @@ async def ban_user(target_user_id: str, request: Request, user = Depends(require
     rights_cache.clear()
     accessible_ids_cache.clear()
     users_cache.clear()
-    tokens_cache.clear() 
     
     return {"status": "ok"}
 
