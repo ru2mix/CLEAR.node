@@ -120,7 +120,7 @@ async def get_my_rights(user = Depends(verify_user), db: aiosqlite.Connection = 
                 CASE WHEN ea.HasRestrict = 1 OR EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN 1 ELSE 0 END,
                 CASE
                     WHEN EXISTS (SELECT 1 FROM EntityPermissions WHERE EntityId = e.Id) THEN
-                        COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'none' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'write' THEN 2 WHEN 'Чтение' THEN 3 WHEN 'read' THEN 3 END LIMIT 1), 'inherited')
+                        COALESCE((SELECT ep.AccessLevel FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND g.IsDeleted = 0 ORDER BY CASE ep.AccessLevel WHEN 'Нет доступа' THEN 1 WHEN 'none' THEN 1 WHEN 'Чтение / Запись' THEN 2 WHEN 'write' THEN 2 WHEN 'Чтение' THEN 3 WHEN 'read' THEN 3 END LIMIT 1), ea.DirectAccess)
                     ELSE ea.DirectAccess
                 END
             FROM Entities e
@@ -188,7 +188,7 @@ async def get_accessible_ids(user = Depends(verify_user), db: aiosqlite.Connecti
                         CASE 
                             WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
                             WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
-                            ELSE 0 
+                            ELSE ea.HasAccess 
                         END
                     ELSE ea.HasAccess
                 END
@@ -244,7 +244,7 @@ async def pull_data(since_revision: int = 0, request: Request = None, user = Dep
                         CASE 
                             WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Нет доступа', 'none') AND g.IsDeleted = 0) THEN 0
                             WHEN EXISTS (SELECT 1 FROM EntityPermissions ep JOIN UserGroups ug ON ep.GroupId = ug.GroupId JOIN Groups g ON g.Id = ug.GroupId WHERE ep.EntityId = e.Id AND ug.UserId = ? AND ep.AccessLevel IN ('Чтение', 'Чтение / Запись', 'read', 'write') AND g.IsDeleted = 0) THEN 1 
-                            ELSE 0 
+                            ELSE ea.HasAccess 
                         END
                     ELSE ea.HasAccess
                 END
